@@ -36,9 +36,11 @@ export function JobDefinitionNewScript({
 
     try {
       const currentTime = new Date().toISOString();
+      const newId = name.replace(/ /g, "_").toLowerCase();
       
+
       const newScript = {
-        id: generateObjectId(),
+        id: newId,
         name: name.trim(),
         type,
         content: content.trim(),

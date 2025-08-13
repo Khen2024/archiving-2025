@@ -5,7 +5,7 @@ import { loadPage } from "loader-lib";
 import { useContent } from "seti-ramesesv1";
 import JobDefinitionModal from "./JobDefinitionModal";
 import { Briefcase, Plus, FileText, Trash2 } from "lucide-react";
-import JobDefinitionScript from "./JobDefinitionScript";
+
 
 type JobDefinition = {
   _id: string;
@@ -16,6 +16,8 @@ type JobDefinition = {
 
 const JobDefinitionTable: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<string | null>(null);
   const [jobDefinitions, setJobDefinitions] = useState<JobDefinition[]>([]);
   const { setContent } = useContent();
   const target = "main";
@@ -37,7 +39,6 @@ const JobDefinitionTable: React.FC = () => {
       }
 
       const result = await res.json();
-      
       const jobs: JobDefinition[] = result?.data || result || [];
       setJobDefinitions(jobs);
     } catch (e) {
@@ -56,23 +57,28 @@ const JobDefinitionTable: React.FC = () => {
       params: {
         jobDefinitionId: job._id,
         jobDefinitionTitle: job.title,
-      
       },
     });
     setContent(target, () => page);
   };
 
-  const handleDelete = async (jobId: string) => {
-    if (!confirm("Are you sure you want to delete this job definition?")) return;
+  const handleDeleteClick = (jobId: string) => {
+    setJobToDelete(jobId);
+    setShowDeleteModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!jobToDelete) return;
 
     try {
       const res = await fetch(
-        `/localapi/mgmt/base/archiving/job_definition/${jobId}`,
+        "/localapi/mgmt/base/archiving/job_definition/delete",
         {
-          method: "DELETE",
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({ _id: jobToDelete }),
         }
       );
 
@@ -80,7 +86,9 @@ const JobDefinitionTable: React.FC = () => {
         throw new Error("Failed to delete job definition");
       }
 
-      setJobDefinitions((prev) => prev.filter((job) => job._id !== jobId));
+      setJobDefinitions((prev) => prev.filter((job) => job._id !== jobToDelete));
+      setShowDeleteModal(false);
+      setJobToDelete(null);
     } catch (e) {
       console.error("Error deleting job definition:", e);
     }
@@ -88,11 +96,8 @@ const JobDefinitionTable: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 font-sans antialiased">
-  
-      {/* Main Content */}
       <main className="flex-grow container mx-auto p-4">
         <div className="bg-white rounded-lg shadow-md p-6">
-          {/* Title & Button */}
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-gray-800">
               Job Definitions
@@ -106,21 +111,20 @@ const JobDefinitionTable: React.FC = () => {
             </button>
           </div>
 
-          {/* Table */}
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600  tracking-wider">
                     Title
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600  tracking-wider">
                     Description
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600  tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -158,7 +162,7 @@ const JobDefinitionTable: React.FC = () => {
                           <FileText className="h-5 w-5" />
                         </button>
                         <button
-                          onClick={() => handleDelete(job._id)}
+                          onClick={() => handleDeleteClick(job._id)}
                           className="text-red-500 hover:text-red-700 transition-colors"
                           title="Delete Job"
                         >
@@ -180,7 +184,6 @@ const JobDefinitionTable: React.FC = () => {
         </div>
       </main>
 
-      {/* Modal */}
       {showModal && (
         <JobDefinitionModal
           onClose={() => setShowModal(false)}
@@ -189,6 +192,37 @@ const JobDefinitionTable: React.FC = () => {
             fetchJobs();
           }}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              Confirm Deletion
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this job definition?
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setJobToDelete(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

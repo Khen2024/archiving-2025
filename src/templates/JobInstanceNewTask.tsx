@@ -3,18 +3,12 @@
 import axios from "axios";
 import React, { useEffect, useState } from "react";
 
+
 function generateObjectId() {
   const timestamp = Math.floor(Date.now() / 1000).toString(16);
   const randomBytes = Math.random().toString(16).substring(2, 16);
   return timestamp + randomBytes.padEnd(16, "0");
 }
-
-
-type JobDefinition = {
-  script_id: string;
-  name: string;
-  
-};
 
 const JobInstanceNewTask = ({
   jobInstanceId,
@@ -27,53 +21,54 @@ const JobInstanceNewTask = ({
   onClose: () => void;
   onSave: () => void;
 }) => {
+  
   const [taskName, setTaskName] = useState("");
-  const [scriptName, setScriptName] = useState("");
+  const [scriptName, setScriptName] = useState(""); 
+
+  
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [jobDefinition, setJobDefinition] = useState<Record<string,any>[]>([]);
+  const [jobDefinitionScripts, setJobDefinitionScripts] = useState<Record<string, any>[]>([]);
 
-    const fetchJobDefinition = async () => {
+
+  const fetchJobDefinition = async () => {
     try {
       const res = await axios.get(
         `/localapi/mgmt/base/archiving/job_definition/${jobDefinitionId}`
       );
-      console.log("Job definition fetched:", res.data);
-
-      const data = res.data;
-
-      console.log("Job definition scripts:", data.scripts[0].name);
-
-
-      setJobDefinition(data.scripts || []);
       
-      
-    } catch (err) { 
+      setJobDefinitionScripts(res.data.scripts || []);
+    } catch (err) {
       console.error("Failed to fetch job definition:", err);
-      setError("Failed to load job definition. Please try again later.");
+      setError("Failed to load script options. Please try again later.");
     }
   };
 
-  useEffect(() => {
-  fetchJobDefinition();
-}, []);
 
+  useEffect(() => {
+    fetchJobDefinition();
+  }, [jobDefinitionId]); 
+
+  
   const handleSubmit = async () => {
-    // // if (!taskName.trim() || !scriptName.trim()) {
-    //   setError("Both task name and script name are required.");
-    //   return;
-    // }
+    
+    if (!taskName.trim() || !scriptName.trim()) {
+      setError("Both task name and a script selection are required.");
+      return;
+    }
 
     setSaving(true);
     setError("");
 
     try {
+     
       const currentTime = new Date().toISOString();
+      const newTaskId = taskName.replace(/\s+/g, "_").toLowerCase() + "_" + generateObjectId();
 
       const newTask = {
-        task_id: generateObjectId(),
-        task_name: taskName.trim(),
-        script_name: scriptName.trim(),
+        id: newTaskId,
+        name: taskName.trim(),
+        script_name: scriptName.trim(), 
         status: "pending",
         records_processed: 0,
         progress: 0,
@@ -83,56 +78,51 @@ const JobInstanceNewTask = ({
       };
 
       
-      const res = await fetch(`/localapi/mgmt/base/archiving/job_instance/${jobInstanceId}`, {
-        method: "GET",
-        headers: { 
-          "Content-Type": "application/json",
-        },
-      });
-      console.log("Response from GET job instance:", res);
-
-      const responseData = await res.json();
-      // console.log("Response data:", responseData.job_definition_id);
-      // const jobDefId = responseData.job_definition_id;
-      // // fetchJobDefinition(jobDefId);
-
-      
+      const res = await fetch(`/localapi/mgmt/base/archiving/job_instance/${jobInstanceId}`);
       if (!res.ok) {
-        throw new Error(responseData.message || "Failed to fetch job instance");
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to fetch current job instance data");
       }
-
+      const jobInstanceData = await res.json();
       
+    
       const requestData = {
         filter: {
           _id: jobInstanceId
         },
         update: {
-          tasks: [...responseData.tasks, newTask]
+         
+          tasks: [...jobInstanceData.tasks, newTask]
         }
       };
-      console.log("Request data for update:", requestData);
       
+      console.log("Request data for update:", JSON.stringify(requestData, null, 2));
+
+    
       const updateRes = await fetch(`/localapi/mgmt/base/archiving/job_instance/update`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestData),
       });
 
-      const updateResponse = await updateRes.json();
-      console.log("Update response:", updateResponse);
-
+      const updateResponseData = await updateRes.json();
+      
       if (!updateRes.ok) {
-        console.error("Update failed:", updateResponse);
+        console.error("Update failed:", updateResponseData);
         throw new Error(
-          updateResponse.message || 
+          updateResponseData.message ||
           `Failed to create task (Status: ${updateRes.status})`
         );
       }
+      
+      console.log("Update successful:", updateResponseData);
 
+     
       onSave();
       onClose();
+
     } catch (err) {
       console.error("Error creating task:", err);
       setError(`Failed to create task: ${(err as Error).message}`);
@@ -142,82 +132,75 @@ const JobInstanceNewTask = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md overflow-hidden">
-        <div className="p-6 border-b border-gray-100">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+        <div className="p-6 border-b border-gray-200">
           <h3 className="text-xl font-semibold text-gray-800">
-            New Task
+            Create a New Task
           </h3>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5">
+          {/* Task Name Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="taskName" className="block text-sm font-medium text-gray-700 mb-1">
               Task Name *
             </label>
             <input
+              id="taskName"
               type="text"
-              placeholder="Enter task name"
+              placeholder="e.g., Process Invoices"
               value={taskName}
               onChange={(e) => setTaskName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               disabled={saving}
               required
             />
           </div>
 
+          {/* Script Name Dropdown */}
           <div>
-            {/* <label className="block text-sm font-medium text-gray-700 mb-1">
-              Script Name *
+            <label htmlFor="scriptName" className="block text-sm font-medium text-gray-700 mb-1">
+              Script *
             </label>
-            <input
-              type="text"
-              placeholder="Enter script name"
+            <select
+              id="scriptName"
               value={scriptName}
               onChange={(e) => setScriptName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={saving}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition"
+              disabled={saving || jobDefinitionScripts.length === 0}
               required
-            /> */}
-
-            <select
-                onChange={()=> console.log("Job definition changed")}
-                className="w-full p-3 pl-10 pr-10 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-600 appearance-none shadow-sm"
-                disabled={saving}
-              >
-                <option value="">-- Select a script --</option>
-               
-
-                {jobDefinition.map((jd:any) => (
-                  
-                  <option key={jd.script_id} value={jd.script_id}>
-                    {jd.name}
-                  </option>
-                ))}
-              </select>
-
-            
+            >
+              <option value="">-- Select a script --</option>
+              {jobDefinitionScripts.map((script: any) => (
+                <option key={script.script_id} value={script.name}>
+                  {script.name}
+                </option>
+              ))}
+            </select>
           </div>
 
+          {/* Error Message Display */}
           {error && (
-            <div className="text-red-600 bg-red-50 px-3 py-2 rounded-md text-sm whitespace-pre-wrap">
+            <div className="text-red-600 bg-red-50 px-3 py-2 rounded-md text-sm whitespace-pre-wrap border border-red-200">
               {error}
             </div>
           )}
         </div>
 
+        {/* Action Buttons */}
         <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
           <button
             onClick={onClose}
             disabled={saving}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-50"
+            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 transition"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={saving || !taskName || !scriptName}
+            className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             {saving ? "Creating..." : "Create Task"}
           </button>

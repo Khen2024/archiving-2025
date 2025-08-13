@@ -5,7 +5,7 @@ import { loadPage } from "loader-lib";
 import { useContent } from "seti-ramesesv1";
 import JobInstanceModal from "./JobInstanceModal";
 import DataList from "./DataList";
-import { Briefcase, Plus, FileText, Trash2 } from "lucide-react";
+import { Plus, FileText, Trash2 } from "lucide-react";
 
 type JobInstance = {
   _id: string;
@@ -19,6 +19,9 @@ type JobInstance = {
 
 const JobInstanceTable: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0); // Key to force DataList refresh
   const { setContent } = useContent();
   const target = "main";
 
@@ -28,8 +31,14 @@ const JobInstanceTable: React.FC = () => {
 
   const listHandler = async (searchQuery: string) => {
     try {
-      const res = await fetch("/localapi/mgmt/base/archiving/job_instance/list");
-      const data: JobInstance[] = await res.json();
+      const res = await fetch(
+        "/localapi/mgmt/base/archiving/job_instance/list"
+      );
+      if (!res.ok) {
+        throw new Error("Failed to fetch job instances");
+      }
+      const result = await res.json();
+      const data: JobInstance[] = result?.data || result || [];
 
       if (!searchQuery) return data;
 
@@ -67,14 +76,33 @@ const JobInstanceTable: React.FC = () => {
     setContent(target, () => page);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this job instance?")) return;
+  const handleDeleteClick = (instanceId: string) => {
+    setJobToDelete(instanceId);
+    setShowDeleteModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!jobToDelete) return;
 
     try {
-      await fetch(`/localapi/mgmt/base/archiving/job_instance/${id}`, {
-        method: "DELETE",
-      });
-      
+      const res = await fetch(
+        "/localapi/mgmt/base/archiving/job_instance/delete",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ _id: jobToDelete }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to delete job instance");
+      }
+
+      setShowDeleteModal(false);
+      setJobToDelete(null);
+      setRefreshKey((prevKey) => prevKey + 1); // Increment key to trigger a refresh
     } catch (e) {
       console.error("Error deleting job instance:", e);
     }
@@ -102,6 +130,7 @@ const JobInstanceTable: React.FC = () => {
           {/* Table */}
           <div className="overflow-x-auto">
             <DataList
+              key={refreshKey} // Use key to force re-render on delete
               cols={[
                 ...cols,
                 {
@@ -136,7 +165,10 @@ const JobInstanceTable: React.FC = () => {
                       <FileText className="h-5 w-5" />
                     </button>
                     <button
-                      onClick={() => handleDelete(row._id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(row._id);
+                      }}
                       className="text-red-500 hover:text-red-700 transition-colors"
                       title="Delete Instance"
                     >
@@ -150,15 +182,46 @@ const JobInstanceTable: React.FC = () => {
         </div>
       </main>
 
-      {/* Modal */}
+      {/* Modal for New Instance */}
       {showModal && (
         <JobInstanceModal
           onClose={() => setShowModal(false)}
           onSave={() => {
             setShowModal(false);
-            // Trigger DataList refresh if needed
+            setRefreshKey((prevKey) => prevKey + 1); // Refresh list on save
           }}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              Confirm Deletion
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this job instance?
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setJobToDelete(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

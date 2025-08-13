@@ -103,7 +103,7 @@ const JobDefinitionEditScript: React.FC<{ params: Params }> = ({ params }) => {
   if (isLoading) {
     return (
       <div className="p-6 font-sans">
-        <p>Loading...</p>
+        <p>Loading...</p> 
       </div>
     );
   }
